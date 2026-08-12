@@ -11,6 +11,7 @@ export default function Profile() {
   const [avatarFile, setAvatarFile] = useState(null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const [locating, setLocating] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -36,6 +37,27 @@ export default function Profile() {
     }
     loadUser()
   }, [router])
+
+  const handleUseLocation = () => {
+    if (!navigator.geolocation) {
+      setMessage("La géolocalisation n'est pas supportée par votre navigateur.")
+      return
+    }
+    setLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords
+        const { data: { user } } = await supabase.auth.getUser()
+        await supabase.from('profiles').update({ latitude, longitude }).eq('id', user.id)
+        setLocating(false)
+        setMessage('Position enregistrée ✅')
+      },
+      () => {
+        setLocating(false)
+        setMessage("Impossible d'obtenir votre position.")
+      }
+    )
+  }
 
   const handleSave = async (e) => {
     e.preventDefault()
@@ -95,8 +117,17 @@ export default function Profile() {
           type="text"
           value={city}
           onChange={(e) => setCity(e.target.value)}
-          className="w-full border rounded-lg px-4 py-2 mb-4"
+          className="w-full border rounded-lg px-4 py-2 mb-2"
         />
+
+        <button
+          type="button"
+          onClick={handleUseLocation}
+          disabled={locating}
+          className="text-sm text-primary hover:underline mb-4 block"
+        >
+          {locating ? 'Localisation...' : '📍 Utiliser ma position actuelle'}
+        </button>
 
         <label className="block text-sm text-textsub mb-1">Bio</label>
         <textarea
