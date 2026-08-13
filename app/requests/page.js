@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
@@ -37,11 +38,6 @@ export default function Requests() {
     load()
   }, [])
 
-  const respond = async (id, status) => {
-    await supabase.from('sessions').update({ status }).eq('id', id)
-    load()
-  }
-
   if (loading) return <p className="p-8 text-textsub">Chargement...</p>
 
   return (
@@ -52,20 +48,7 @@ export default function Requests() {
           {incoming.length === 0 && <p className="text-textsub">Aucune demande pour le moment.</p>}
           <div className="space-y-3">
             {incoming.map((s) => (
-              <div key={s.id} className="bg-white p-4 rounded-lg shadow-sm flex justify-between items-center">
-                <div>
-                  <p className="font-medium text-textmain">{s.skills?.title}</p>
-                  <p className="text-sm text-textsub">
-                    Demandé par {s.profiles?.full_name || 'Utilisateur'} · {s.mode} · {s.status}
-                  </p>
-                </div>
-                {s.status === 'requested' && (
-                  <div className="flex gap-2">
-                    <button onClick={() => respond(s.id, 'accepted')} className="text-primary text-sm hover:underline">Accepter</button>
-                    <button onClick={() => respond(s.id, 'declined')} className="text-red-600 text-sm hover:underline">Refuser</button>
-                  </div>
-                )}
-              </div>
+              <SessionRow key={s.id} session={s} otherName={s.profiles?.full_name} onUpdate={load} />
             ))}
           </div>
         </div>
@@ -75,16 +58,102 @@ export default function Requests() {
           {outgoing.length === 0 && <p className="text-textsub">Aucune demande envoyée.</p>}
           <div className="space-y-3">
             {outgoing.map((s) => (
-              <div key={s.id} className="bg-white p-4 rounded-lg shadow-sm">
-                <p className="font-medium text-textmain">{s.skills?.title}</p>
-                <p className="text-sm text-textsub">
-                  À {s.profiles?.full_name || 'Utilisateur'} · {s.mode} · statut: {s.status}
-                </p>
-              </div>
+              <SessionRow key={s.id} session={s} otherName={s.profiles?.full_name} onUpdate={load} />
             ))}
           </div>
         </div>
       </div>
     </main>
+  )
+}
+
+function SessionRow({ session, otherName, onUpdate }) {
+  const [scheduledAt, setScheduledAt] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const respond = async (status) => {
+    setBusy(true)
+    await supabase.from('sessions').update({ status }).eq('id', session.id)
+    setBusy(false)
+    onUpdate()
+  }
+
+  const confirmSchedule = async () => {
+    if (!scheduledAt) return
+    setBusy(true)
+    setError('')
+    const { error } = await supabase
+      .from('sessions')
+      .update({ scheduled_at: scheduledAt, status: 'scheduled' })
+      .eq('id', session.id)
+    setBusy(false)
+    if (error) setError(error.message)
+    onUpdate()
+  }
+
+  const markCompleted = async () => {
+    setBusy(true)
+    setError('')
+    const { error } = await supabase.rpc('complete_session', { session_id_input: session.id })
+    setBusy(false)
+    if (error) setError(error.message)
+    onUpdate()
+  }
+
+  return (
+    <div className="bg-white p-4 rounded-lg shadow-sm">
+      <div className="mb-2">
+        <p className="font-medium text-textmain">{session.skills?.title}</p>
+        <p className="text-sm text-textsub">
+          {otherName || 'Utilisateur'} · {session.mode} · statut: {session.status}
+        </p>
+        {session.scheduled_at && (
+          <p className="text-xs text-textsub">
+            Prévu le {new Date(session.scheduled_at).toLocaleString('fr-FR')}
+          </p>
+        )}
+      </div>
+
+      {error && <p className="text-red-600 text-xs mb-2">{error}</p>}
+
+      {session.status === 'requested' && (
+        <div className="flex gap-2">
+          <button onClick={() => respond('accepted')} disabled={busy} className="text-primary text-sm hover:underline">Accepter</button>
+          <button onClick={() => respond('declined')} disabled={busy} className="text-red-600 text-sm hover:underline">Refuser</button>
+        </div>
+      )}
+
+      {session.status === 'accepted' && (
+        <div className="flex gap-2 items-center flex-wrap">
+          <input
+            type="datetime-local"
+            value={scheduledAt}
+            onChange={(e) => setScheduledAt(e.target.value)}
+            className="border rounded-lg px-2 py-1 text-sm"
+          />
+          <button onClick={confirmSchedule} disabled={busy} className="bg-primary text-white text-sm px-3 py-1 rounded-lg hover:opacity-90 disabled:opacity-50">
+            Confirmer le créneau
+          </button>
+        </div>
+      )}
+
+      {session.status === 'scheduled' && (
+        <div className="flex gap-3 items-center flex-wrap">
+          {session.mode === 'online' && (
+            <Link href={`/session/${session.id}`} className="text-primary text-sm hover:underline">
+              Rejoindre l'appel vidéo
+            </Link>
+          )}
+          <button onClick={markCompleted} disabled={busy} className="bg-primary text-white text-sm px-3 py-1 rounded-lg hover:opacity-90 disabled:opacity-50">
+            Marquer comme terminé
+          </button>
+        </div>
+      )}
+
+      {session.status === 'completed' && (
+        <p className="text-xs text-green-700">✅ Session terminée, crédit transféré</p>
+      )}
+    </div>
   )
 }
