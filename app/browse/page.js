@@ -24,28 +24,28 @@ export default function Browse() {
   }, [])
 
   useEffect(() => {
-  const initMap = async () => {
-    if (!mapRef.current || mapInstance.current) return
-    if (mapRef.current._leaflet_id) return // guard: container already used by Leaflet
+    const initMap = async () => {
+      if (!mapRef.current || mapInstance.current) return
+      if (mapRef.current._leaflet_id) return
 
-    const L = (await import('leaflet')).default
-    await import('leaflet/dist/leaflet.css')
+      const L = (await import('leaflet')).default
+      await import('leaflet/dist/leaflet.css')
 
-    const map = L.map(mapRef.current).setView([36.75, 3.06], 6) // centered on Algeria
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-    }).addTo(map)
-    mapInstance.current = map
-  }
-  initMap()
-
-  return () => {
-    if (mapInstance.current) {
-      mapInstance.current.remove()
-      mapInstance.current = null
+      const map = L.map(mapRef.current).setView([36.75, 3.06], 6)
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+      }).addTo(map)
+      mapInstance.current = map
     }
-  }
-}, [])
+    initMap()
+
+    return () => {
+      if (mapInstance.current) {
+        mapInstance.current.remove()
+        mapInstance.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     const addMarkers = async () => {
@@ -87,17 +87,63 @@ export default function Browse() {
 
         <div className="grid gap-4 sm:grid-cols-2">
           {filtered.map((skill) => (
-            <div key={skill.id} className="bg-white p-4 rounded-lg shadow-sm">
-              <h2 className="font-semibold text-textmain">{skill.title}</h2>
-              <p className="text-sm text-textsub mb-1">{skill.category} · {skill.mode}</p>
-              <p className="text-sm text-textmain mb-2">{skill.description}</p>
-              <p className="text-xs text-textsub">
-                Par {skill.profiles?.full_name || 'Utilisateur'} · {skill.profiles?.city || 'Localisation inconnue'}
-              </p>
-            </div>
+            <SkillCard key={skill.id} skill={skill} />
           ))}
         </div>
       </div>
     </main>
+  )
+}
+
+function SkillCard({ skill }) {
+  const [requesting, setRequesting] = useState(false)
+  const [mode, setMode] = useState(skill.mode === 'both' ? 'online' : skill.mode)
+  const [status, setStatus] = useState('')
+
+  const handleRequest = async () => {
+    setRequesting(true)
+    setStatus('')
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setStatus('Connectez-vous pour demander un échange.')
+      setRequesting(false)
+      return
+    }
+    const { error } = await supabase.from('sessions').insert({
+      teacher_id: skill.user_id,
+      learner_id: user.id,
+      skill_id: skill.id,
+      mode,
+      status: 'requested',
+    })
+    setRequesting(false)
+    setStatus(error ? 'Erreur: ' + error.message : 'Demande envoyée ✅')
+  }
+
+  return (
+    <div className="bg-white p-4 rounded-lg shadow-sm">
+      <h2 className="font-semibold text-textmain">{skill.title}</h2>
+      <p className="text-sm text-textsub mb-1">{skill.category} · {skill.mode}</p>
+      <p className="text-sm text-textmain mb-2">{skill.description}</p>
+      <p className="text-xs text-textsub mb-3">
+        Par {skill.profiles?.full_name || 'Utilisateur'} · {skill.profiles?.city || 'Localisation inconnue'}
+      </p>
+
+      {skill.mode === 'both' && (
+        <select value={mode} onChange={(e) => setMode(e.target.value)} className="border rounded-lg px-2 py-1 text-sm mb-2">
+          <option value="online">En ligne</option>
+          <option value="in_person">Présentiel</option>
+        </select>
+      )}
+
+      <button
+        onClick={handleRequest}
+        disabled={requesting}
+        className="block w-full bg-primary text-white text-sm py-2 rounded-lg hover:opacity-90 disabled:opacity-50"
+      >
+        {requesting ? 'Envoi...' : "Demander un échange"}
+      </button>
+      {status && <p className="text-xs mt-2 text-textsub">{status}</p>}
+    </div>
   )
 }

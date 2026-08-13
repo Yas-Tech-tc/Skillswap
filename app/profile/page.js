@@ -8,6 +8,7 @@ export default function Profile() {
   const [fullName, setFullName] = useState('')
   const [bio, setBio] = useState('')
   const [city, setCity] = useState('')
+  const [creditBalance, setCreditBalance] = useState(null)
   const [avatarFile, setAvatarFile] = useState(null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
@@ -33,6 +34,7 @@ export default function Profile() {
         setFullName(profile.full_name || '')
         setBio(profile.bio || '')
         setCity(profile.city || '')
+        setCreditBalance(profile.credit_balance)
       }
     }
     loadUser()
@@ -101,7 +103,14 @@ export default function Profile() {
   return (
     <main className="min-h-screen bg-bgsoft flex items-center justify-center px-6 py-12">
       <form onSubmit={handleSave} className="bg-white p-8 rounded-xl shadow-sm w-full max-w-md">
-        <h1 className="text-2xl font-bold text-textmain mb-6">Mon profil</h1>
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold text-textmain">Mon profil</h1>
+          {creditBalance !== null && (
+            <span className="bg-primary/10 text-primary text-sm font-medium px-3 py-1 rounded-full">
+              {creditBalance} crédit{creditBalance !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
         {message && <p className="text-sm mb-4 text-primary">{message}</p>}
 
         <label className="block text-sm text-textsub mb-1">Nom complet</label>
